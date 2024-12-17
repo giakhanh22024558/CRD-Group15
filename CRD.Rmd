@@ -1,0 +1,63 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(daewr)
+library(caret)
+```
+
+```{r}
+data_clean <- ys1a[!is.na(ys1a$ys), ]
+
+# Chọn các cột cần thiết
+columns_to_keep <- c("ys", "vec", "deltachi", "delta", "deltahmix", "deltasmix")
+filtered_data <- data_clean[, columns_to_keep]
+```
+
+```{r}
+# alpha là mức ý nghĩa
+#nlev là số biến độc lập
+#power = 0.8 => min replicaiton = 5
+f_power1 <- as.data.frame(Fpower1(alpha = 0.05, nlev = 3, nreps = 2:6, Delta = 3, sigma = 1.2))
+selected_rows <- f_power1[f_power1$power > 0.8, ]
+n_rep_min <- selected_rows[1, "nreps"]
+n_rep_min
+```
+
+```{r}
+set.seed(123) # Đảm bảo sự tái lập của phân chia
+test_sizes <- c(0.1, 0.2, 0.3) # Các tỷ lệ kiểm thử
+results <- data.frame(test_size = test_sizes, RMSE = NA, MAPE = NA)
+
+for (i in 1:length(test_sizes)) {
+  # Lặp lại thí nghiệm với 5 replications
+  for (rep in 1:5) {
+    # Tạo tập kiểm thử với tỷ lệ test_sizes[i]
+    test_index <- sample(1:nrow(filtered_data), size = floor(test_sizes[i] * nrow(filtered_data)))
+    train_data <- filtered_data[-test_index, ]
+    test_data <- filtered_data[test_index, ]
+
+    # Huấn luyện mô hình với tập huấn luyện
+    model <- lm(ys ~ vec + deltachi + delta + deltahmix + deltasmix, data = train_data)
+
+    # Dự đoán trên tập kiểm thử
+    predictions <- predict(model, newdata = test_data)
+
+    # Tính toán RMSE và MAPE
+    RMSE <- sqrt(mean((test_data$ys - predictions)^2))
+    MAPE <- mean(abs((test_data$ys - predictions) / test_data$ys)) * 100
+
+    # Lưu kết quả
+    results$RMSE[i] <- results$RMSE[i] + RMSE
+    results$MAPE[i] <- results$MAPE[i] + MAPE
+  }
+
+  # Tính trung bình của các replications để có giá trị trung bình cuối cùng
+  results$RMSE[i] <- results$RMSE[i] / 5
+  results$MAPE[i] <- results$MAPE[i] / 5
+}
+
+results
+```
