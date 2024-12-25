@@ -6,6 +6,7 @@ output: html_notebook
 ```{r}
 library(daewr)
 library(caret)
+library(MASS)
 ```
 
 ```{r}
@@ -20,8 +21,8 @@ filtered_data <- data_clean[, columns_to_keep]
 # alpha là mức ý nghĩa
 #nlev là số biến độc lập
 #power = 0.8 => min replicaiton = 5
-f_power1_df <- as.data.frame(Fpower1(alpha = 0.05, nlev = 3, nreps = 2:6, Delta = 3, sigma = 1.2))
-selected_rows <- f_power1[f_power1$power > 0.8, ]
+f_power1_df <- as.data.frame(Fpower1(alpha = 0.05, nlev = 3, nreps = 2:6, Delta = 0.25, sigma = 1.2))
+selected_rows <- f_power1_df[f_power1_df$power > 0.8, ]
 n_rep_min <- selected_rows[1, "nreps"]
 n_rep_min
 ```
@@ -68,6 +69,70 @@ results
 ```
 
 ```{r}
+#Checking linear assumption, testing only
+set.seed(123) # Ensure reproducibility
+
+# Parameters
+test_sizes <- c(0.1, 0.2, 0.3)
+n_rep_min <- 5 # Define number of replications
+results <- data.frame(
+  test_size = numeric(),
+  replication = integer(),
+  RMSE = numeric(),
+  MAPE = numeric()
+)
+
+# Main loop
+for (i in 1:length(test_sizes)) {
+  for (rep in 1:n_rep_min) {
+    # Split the data into training and testing sets
+    test_index <- sample(1:nrow(filtered_data), size = floor(test_sizes[i] * nrow(filtered_data)))
+    train_data <- filtered_data[-test_index, ]
+    test_data <- filtered_data[test_index, ]
+    
+    # Train the linear model
+    model <- lm(ys ~ vec + deltachi + delta + deltahmix + deltasmix, data = train_data)
+    
+    # Check residuals for linear assumption
+    residuals <- resid(model)
+    fitted_values <- fitted(model)
+    
+    # Linearity diagnostic plot (optional visualization)
+    plot(fitted_values, residuals, main = "Residuals vs Fitted", xlab = "Fitted Values", ylab = "Residuals")
+    abline(h = 0, col = "red", lty = 2)
+    
+    # If the assumption is violated, apply Box-Cox transformation
+    boxcox_result <- boxcox(model, lambda = seq(-2, 2, 0.1)) # Find best lambda
+    best_lambda <- boxcox_result$x[which.max(boxcox_result$y)]
+    
+    if (best_lambda > 0) { # Apply transformation only if lambda is valid
+      train_data$ys <- train_data$ys^best_lambda
+      test_data$ys <- test_data$ys^best_lambda
+      model <- lm(ys ~ vec + deltachi + delta + deltahmix + deltasmix, data = train_data) # Refit model
+    }
+    
+    # Make predictions on the test set
+    predictions <- predict(model, newdata = test_data)
+    
+    # Calculate RMSE and MAPE
+    RMSE <- sqrt(mean((test_data$ys - predictions)^2))
+    MAPE <- mean(abs((test_data$ys - predictions) / test_data$ys)) * 100
+    
+    # Record results
+    results <- rbind(results, data.frame(
+      test_size = test_sizes[i],
+      replication = rep,
+      RMSE = RMSE,
+      MAPE = MAPE
+    ))
+  }
+}
+
+# Print final results
+print(results)
+```
+
+```{r}
 #kiểm định ANOVA cho RMSE
 anova_RMSE <- aov(RMSE ~ as.factor(test_size), data = results)
 summary(anova_RMSE)
@@ -82,5 +147,17 @@ summary(anova_MAPE)
 ```{r}
 # Hậu kiểm
 TukeyHSD(anova_RMSE)
+```
+
+```{r}
 TukeyHSD(anova_MAPE)
+```
+
+```{r}
+system("git branch -a")
+system("git remote add origin https://github.com/giakhanh22024558/CRD-Group15.git")
+```
+
+```{r}
+system("git push origin master")
 ```
