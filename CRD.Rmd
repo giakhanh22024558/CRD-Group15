@@ -1,5 +1,5 @@
 ---
-title: "R Notebook"
+title: "CRD Group15"
 output: html_notebook
 ---
 
@@ -17,44 +17,7 @@ columns_to_keep <- c("ys", "vec", "deltachi", "delta", "deltahmix", "deltasmix")
 filtered_data <- data_clean[, columns_to_keep]
 ```
 
-```{r}
-rmse_delta <- 44.74867  
-rmse_sigma <- 52.2388 
-
-mape_delta <- 3.261462  
-mape_sigma <- 10.36312  
-
-# Function to calculate n_rep_min for a given metric
-calculate_n_rep_min <- function(delta, sigma) {
-  # Perform power calculations for varying replications
-  f_power1_df <- as.data.frame(Fpower1(
-    alpha = 0.05, nlev = 3, nreps = 2:1000, Delta = delta, sigma = sigma
-  ))
-  
-  # Filter rows where power exceeds 0.8
-  selected_rows <- f_power1_df[f_power1_df$power > 0.8, ]
-  
-  # Extract minimum nreps achieving power > 0.8
-  if (nrow(selected_rows) > 0) {
-    n_rep_min <- selected_rows[1, "nreps"]
-  } else {
-    n_rep_min <- NA  # No nreps achieve power > 0.8
-  }
-  
-  return(n_rep_min)
-}
-
-# Calculate n_rep_min for RMSE and MAPE
-n_rep_min_rmse <- calculate_n_rep_min(rmse_delta, rmse_sigma)
-n_rep_min_mape <- calculate_n_rep_min(mape_delta, mape_sigma)
-
-# Output results
-cat("Minimum replications for RMSE:", n_rep_min_rmse, "\n")
-cat("Minimum replications for MAPE:", n_rep_min_mape, "\n")
-```
-
-```{r}
-#pilot experiment
+```{r Pilot Experiment tp determine Delta and sigma}
 set.seed(123) # Đảm bảo tính tái lập
 test_sizes <- c(0.1, 0.2, 0.3)
 results <- data.frame(
@@ -64,7 +27,7 @@ results <- data.frame(
   MAPE = numeric()
 )
 
-# Vòng lặp chính
+# Vòng lặp chính: replication = 10
 for (i in 1:length(test_sizes)) {
   for (rep in 1:10) {
     # Tạo tập kiểm thử với tỷ lệ test_sizes[i]
@@ -95,8 +58,64 @@ for (i in 1:length(test_sizes)) {
 results
 ```
 
-```{r}
+```{r Calculate sigma (standard deviation) and Delta of RMSE}
+rmse_sigma <- sd(results$RMSE)
 
+# Calculate delta (mean difference of RMSE across test sizes)
+group_means <- aggregate(RMSE ~ test_size, data = results, mean)
+delta_matrix <- outer(group_means$RMSE, group_means$RMSE, "-")
+delta_observed <- abs(delta_matrix[lower.tri(delta_matrix)])
+rmse_delta <- mean(delta_observed)
+
+# Output results
+cat("Sigma (Standard deviation of RMSE):", rmse_sigma, "\n")
+cat("Delta (Mean observed difference in RMSE):", rmse_delta, "\n")
+```
+
+```{r Calculate sigma (standard deviation) and Delta of MAPE}
+mape_sigma <- sd(results$MAPE)
+
+# Calculate delta (mean difference of MAPE across test sizes)
+group_means_mape <- aggregate(MAPE ~ test_size, data = results, mean)
+delta_matrix_mape <- outer(group_means_mape$MAPE, group_means_mape$MAPE, "-")
+delta_observed_mape <- abs(delta_matrix_mape[lower.tri(delta_matrix_mape)])
+mape_delta <- mean(delta_observed_mape)
+
+# Output results for MAPE
+cat("Sigma (Standard deviation of MAPE):", mape_sigma, "\n")
+cat("Delta (Mean observed difference in MAPE):", mape_delta, "\n")
+```
+
+```{r calculate n_rep_min for a given metric}
+calculate_n_rep_min <- function(delta, sigma) {
+  # Perform power calculations for varying replications
+  f_power1_df <- as.data.frame(Fpower1(
+    alpha = 0.05, nlev = 3, nreps = 2:1000, Delta = delta, sigma = sigma
+  ))
+  
+  # Filter rows where power exceeds 0.8
+  selected_rows <- f_power1_df[f_power1_df$power > 0.8, ]
+  
+  # Extract minimum nreps achieving power > 0.8
+  if (nrow(selected_rows) > 0) {
+    n_rep_min <- selected_rows[1, "nreps"]
+  } else {
+    n_rep_min <- NA  # No nreps achieve power > 0.8
+  }
+  
+  return(n_rep_min)
+}
+
+# Calculate n_rep_min for RMSE and MAPE
+n_rep_min_rmse <- calculate_n_rep_min(rmse_delta, rmse_sigma)
+n_rep_min_mape <- calculate_n_rep_min(mape_delta, mape_sigma)
+
+# Output results
+cat("Minimum replications for RMSE:", n_rep_min_rmse, "\n")
+cat("Minimum replications for MAPE:", n_rep_min_mape, "\n")
+```
+
+```{r Function to perform experiment with replication for RMSE and MAPE}
 results <- data.frame(
   test_size = numeric(), 
   replication_type = character(),
@@ -166,54 +185,20 @@ cat("\nMAPE Results:\n")
 print(mape_results)
 ```
 
-```{r}
-# Calculate sigma (standard deviation of RMSE)
-sigma <- sd(results$RMSE)
-
-# Calculate delta (mean difference of RMSE across test sizes)
-group_means <- aggregate(RMSE ~ test_size, data = results, mean)
-delta_matrix <- outer(group_means$RMSE, group_means$RMSE, "-")
-delta_observed <- abs(delta_matrix[lower.tri(delta_matrix)])
-delta_practical <- mean(delta_observed)
-
-# Output results
-cat("Sigma (Standard deviation of RMSE):", sigma, "\n")
-cat("Delta (Mean observed difference in RMSE):", delta_practical, "\n")
-```
-
-```{r}
-# Calculate sigma (standard deviation of MAPE)
-sigma_mape <- sd(results$MAPE)
-
-# Calculate delta (mean difference of MAPE across test sizes)
-group_means_mape <- aggregate(MAPE ~ test_size, data = results, mean)
-delta_matrix_mape <- outer(group_means_mape$MAPE, group_means_mape$MAPE, "-")
-delta_observed_mape <- abs(delta_matrix_mape[lower.tri(delta_matrix_mape)])
-delta_practical_mape <- mean(delta_observed_mape)
-
-# Output results for MAPE
-cat("Sigma (Standard deviation of MAPE):", sigma_mape, "\n")
-cat("Delta (Mean observed difference in MAPE):", delta_practical_mape, "\n")
-```
-
-```{r}
-#kiểm định ANOVA cho RMSE
+```{r ANOVA for RMSE}
 anova_RMSE <- aov(RMSE ~ as.factor(test_size), data = rmse_results)
 summary(anova_RMSE)
 ```
 
-```{r}
-#kiểm định ANOVA cho MAPE
+```{r ANOVA for MAPE}
 anova_MAPE <- aov(MAPE ~ as.factor(test_size), data = mape_results)
 summary(anova_MAPE)
 ```
 
-```{r}
-# Hậu kiểm
+```{r post-hoc for RMSE}
 TukeyHSD(anova_RMSE)
 ```
-
-```{r}
+```{r post-hoc for MAPE}
 TukeyHSD(anova_MAPE)
 ```
 
@@ -230,7 +215,7 @@ system("git config --global user.email \"hotmashmallow@gmail.com\"")
 system("git config --global user.username \"giakhanh22024558\"")
 
 # Commit with a message (ensure the message is properly quoted)
-system("git commit -m \"chinh lai cach tinh replication\"")
+system("git commit -m \"refactor code\"")
 ```
 
 ```{r}
